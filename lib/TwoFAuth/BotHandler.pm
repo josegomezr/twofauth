@@ -1,53 +1,33 @@
 package TwoFAuth::BotHandler;
+use Mojo::UserAgent;
 use Router::Simple;
 use feature 'say';
-use Mojo::UserAgent;
 
-use Class::Accessor::Lite 0.05 (
-    new => 1,
-    ro => [qw(routes directory_slash)],
-);
+sub command_start {
+  say 'called start';
+  my $self = shift;
+  my $command = $self->{'current_command'};
+  my $message = $self->{'current_message'};
+  my @args = @{$self->{'current_args'}}; # perl dark magic
 
-sub send_message {
+  my $bot = $self->{'bot'};
+  my $mojo_ctx = $self->{'mojo_ctx'};
+  my $target = $message->{'from'}->{'id'};
 
-  my $target = shift;
-  my $text = shift;
-  my $extra_args = shift;
-
-  if(!defined($extra_args) or !extra_args){
-    $extra_args = {};
-  }
-
-  my $ua  = Mojo::UserAgent->new;
-  my $token = "bot710352158:AAEsnb0n96a8xIIFWfJyPomkmYErjc45iQo";
-  my $url = 'https://api.telegram.org/'. $token .'/sendMessage';
-
-  my $form_data = {
-    text => $text,
-    parse_mode => 'markdown',
-    chat_id => $target,
-  };
-
-  for my $key ( keys %$extra_args ) {
-    $form_data->{$key} = $extra_args->{$key};
-  }
-
-  say $ua->post($url => form => $form_data)->result->body;
-}
-
-sub fn {
-  my $message = shift;
-
-  my @pieces = split(/ /, $message->{'text'});
-  shift @pieces; # command
-  my $provider_code = shift @pieces;
+  my $provider_code = shift @args;
 
   if(!$provider_code){
     my $text = 'Welcome to TwoFAuth. In order to use this bot,'
     . ' U\'ll need get here from an authorization link.';
-    send_message $message->{'from'}->{'id'}, $text;  
-    return;
+
+    return $bot->send_message(
+      $target, $text
+    );
+
   }
+
+  
+  return 'do something with db!';
 
   my $text = 'Authorizing you on **%PROVIDER%**!'
    . "\n"
@@ -57,30 +37,48 @@ sub fn {
    . "`131-212-333`";
    ;
 
-  send_message $message->{'from'}->{'id'}, $text;
-  
+  return $bot->send_message(
+    $target, $text
+  );
 }
 
-sub fn2 {
-  #, {
-  #   reply_to_message_id => $message->{'message_id'},
-  # }
-  say "called fn2";
-}
-
-sub default {
+sub command_default {
   say 'DEFAULT!';
+
+  my $self = shift;
+  my $command = $self->{'current_command'};
+  my $message = $self->{'current_message'};
+  my @args = @{$self->{'current_args'}}; # perl dark magic
+
+  my $bot = $self->{'bot'};
+  my $mojo_ctx = $self->{'mojo_ctx'};
+  my $target = $message->{'from'}->{'id'};
+
+  # check bot state before rejecting
+
+  if(substr($command, 0, 1) eq '/'){
+    my $text = "No conozco el comando `".$command."`";
+
+    return $bot->send_message(
+      $target, $text
+    );
+  }
+
 }
 
-sub setup {
+sub new {
+  my ($class, %args) = @_;
+  return bless \%args, $class;
+}
+
+sub setup_router {
   my $self = shift;
 
   my $router = Router::Simple->new();
   
   $router->connect('/start', {
     action => sub {
-      say 'matched';
-      return fn @_;
+      return command_start $self;
     }
   });
 
@@ -91,22 +89,35 @@ sub setup {
 
 sub match {
   my $self = shift;
-  my $message = shift;
-  my @pieces = split(/ /, $message);
+ 
+  my $message_json = shift;
+  
+  my $message_text = $message_json->{'text'};
 
-  my $command = shift @pieces;
+  my @message_args = split(/ /, $message_text);
+
+  my $command = shift @message_args;
+
+  $self->{'current_message'} = $message_json;
+  $self->{'current_command'} = $command;
+  $self->{'current_args'} = \@message_args;
+
+  say(">>>>>>> ", $command);
 
   $r = $self->{'router'}->match($command);
   
   if(!$r){
     return bless {
       action => sub {
-        default @_;
+        say 'matched default';
+        return command_default $self;
       }
     }
   }
 
   return $r;
 }
+
+
 
 1;
